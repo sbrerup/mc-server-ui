@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dripcraft-admin
+  namespace: dripcraft-admin
+  labels:
+    app.kubernetes.io/name: dripcraft-admin
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dripcraft-admin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dripcraft-admin
+    spec:
+      serviceAccountName: dripcraft-admin
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: dripcraft-admin
+          # Renovate replaces this with a digest pin once the first image exists.
+          image: ghcr.io/sbrerup/mc-server-ui:latest
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: GITHUB_REPO
+              value: sbrerup/dripcraft
+            - name: GITHUB_BRANCH
+              value: main
+            # direct commits to main; pull-request opens a PR to merge by hand.
+            - name: APPLY_MODE
+              value: direct
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: dripcraft-admin
+                  key: github-token
+            - name: UI_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dripcraft-admin
+                  key: ui-password
+            - name: TZ
+              value: Europe/Copenhagen
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 256Mi

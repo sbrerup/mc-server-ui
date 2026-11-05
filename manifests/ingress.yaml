@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dripcraft-admin
+  namespace: dripcraft-admin
+  annotations:
+    # Admin UI: only the owner may reach it (see the tailnet policy).
+    tailscale.com/tags: tag:k8s-admin
+spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - dripcraft-admin
+  rules:
+    - host: dripcraft-admin
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dripcraft-admin
+                port:
+                  number: 80

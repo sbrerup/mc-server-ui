@@ -1,0 +1,40 @@
+{
+  "name": "mc-server-ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Admin UI for the DripCraft Minecraft server",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "esbuild server/index.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/server.cjs --external:bufferutil --external:utf-8-validate --log-level=warning && node dist/server.cjs",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && esbuild server/index.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/server.cjs --external:bufferutil --external:utf-8-validate --minify --log-level=warning",
+    "start": "node dist/server.cjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "demo": "node scripts/demo.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.6",
+    "diff": "9.0.0",
+    "hono": "4.13.16",
+    "ws": "8.22.1",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.2.3",
+    "@types/ws": "8.18.2",
+    "@vitejs/plugin-react": "6.2.1",
+    "esbuild": "0.28.2",
+    "lucide-react": "1.69.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
+  }
+}

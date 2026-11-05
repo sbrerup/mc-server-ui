@@ -1,0 +1,90 @@
+# The panel holds a token that can deploy to the cluster, so it only accepts traffic
+# from the Tailscale proxy and can't reach the LAN, the tailnet or other workloads.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: dripcraft-admin
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dripcraft-admin-ingress
+  namespace: dripcraft-admin
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: dripcraft-admin
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: tailscale
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dripcraft-admin-egress
+  namespace: dripcraft-admin
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: dripcraft-admin
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    # GitHub and the Paper release API: HTTPS only.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.0.0.0/24
+              - 192.0.2.0/24
+              - 192.168.0.0/16
+              - 198.18.0.0/15
+              - 198.51.100.0/24
+              - 203.0.113.0/24
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+      ports:
+        - {protocol: TCP, port: 443}
+---
+# A plain NetworkPolicy can't select the API server under Cilium: it runs on the node,
+# and CIDR rules don't apply to node addresses.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: dripcraft-admin-kube-api
+  namespace: dripcraft-admin
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: dripcraft-admin
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP

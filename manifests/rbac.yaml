@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dripcraft-admin
+  namespace: dripcraft-admin
+---
+# Exec is how the panel uses rcon-cli, as the dripcraft README does by hand. It avoids
+# opening RCON to the network, so dripcraft-public's network policies stay as they are.
+# Exec is powerful, so this is limited to the one pod and needs no access to Secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dripcraft-admin
+  namespace: dripcraft-public
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    resourceNames: [minecraft-0]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    resourceNames: [minecraft-0]
+    verbs: [get, create]
+  - apiGroups: [""]
+    resources: [pods/log]
+    resourceNames: [minecraft-0]
+    verbs: [get]
+  - apiGroups: [apps]
+    resources: [statefulsets]
+    resourceNames: [minecraft]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dripcraft-admin
+  namespace: dripcraft-public
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dripcraft-admin
+subjects:
+  - kind: ServiceAccount
+    name: dripcraft-admin
+    namespace: dripcraft-admin
+---
+# Read-only, for showing sync status. Patch would allow repointing the Application at
+# another repository, so the panel waits for Argo CD's own polling instead.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dripcraft-admin-status
+  namespace: argocd
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    resourceNames: [dripcraft-public]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dripcraft-admin-status
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dripcraft-admin-status
+subjects:
+  - kind: ServiceAccount
+    name: dripcraft-admin
+    namespace: dripcraft-admin
