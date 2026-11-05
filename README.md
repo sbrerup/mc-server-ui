@@ -64,11 +64,14 @@ dripcloud points Argo CD at them.
    for `sbrerup/dripcraft` only, with **Contents: read and write**. Add
    **Pull requests: read and write** if you use `pull-request` mode.
 
-3. Create the namespace and Secret, which live only in the cluster:
+3. Create the namespace and Secret, which live only in the cluster. Replace `TOKEN`
+   with the token from step 2.
 
    ```bash
    kubectl create namespace dripcraft-admin
    ```
+
+   In bash:
 
    ```bash
    kubectl -n dripcraft-admin create secret generic dripcraft-admin \
@@ -76,14 +79,28 @@ dripcloud points Argo CD at them.
      --from-literal=github-token=TOKEN
    ```
 
+   In PowerShell 7:
+
+   ```powershell
+   kubectl -n dripcraft-admin create secret generic dripcraft-admin "--from-literal=ui-password=$([Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(18)))" --from-literal=github-token=TOKEN
+   ```
+
 4. Copy `deploy/dripcloud-app.yaml` to `apps/dripcraft-admin.yaml` in dripcloud and
    merge it.
 
 5. Open `https://dripcraft-admin.turtle-vector.ts.net`. The password is in the
-   Secret:
+   Secret.
+
+   In bash:
 
    ```bash
    kubectl -n dripcraft-admin get secret dripcraft-admin -o jsonpath='{.data.ui-password}' | base64 -d
+   ```
+
+   In PowerShell:
+
+   ```powershell
+   [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((kubectl -n dripcraft-admin get secret dripcraft-admin -o jsonpath='{.data.ui-password}')))
    ```
 
 Renovate pins the image to a digest once it runs on this repository. Until then the
