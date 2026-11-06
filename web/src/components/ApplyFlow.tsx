@@ -5,6 +5,7 @@ import { SETTINGS_BY_ID } from "../../../shared/catalog";
 import { ID } from "../../../shared/rules";
 import type { ApplyResponse, Conflict, PreviewResponse, ServerStatus } from "../../../shared/types";
 import { api, ApiError } from "../api";
+import type { RolloutProgress } from "../autoRefresh";
 import { displayValue, shortSha } from "../format";
 import { useConfig } from "../state";
 
@@ -267,27 +268,13 @@ function Step({ state, label, detail }: { state: StepState; label: string; detai
 }
 
 /** Follows a commit through Argo CD to a running server. */
-export function RolloutTracker({ status }: { status?: ServerStatus }) {
+export function RolloutTracker({ status, rollout }: { status?: ServerStatus; rollout: RolloutProgress }) {
   const { lastApply, setLastApply } = useConfig();
-  const [everStopped, setEverStopped] = useState(false);
-
-  const synced = !!lastApply && status?.argo.revision === lastApply.sha;
-  const down = status?.pod.state !== "online" || !!status?.rollout.updating;
-
-  useEffect(() => {
-    if (synced && down) setEverStopped(true);
-  }, [synced, down]);
-
-  // Reset when a new commit is being tracked.
-  useEffect(() => {
-    setEverStopped(false);
-  }, [lastApply?.sha]);
+  const { synced, down, everStopped, finished } = rollout;
 
   if (!lastApply) return null;
 
   const failed = status?.argo.operation === "Failed" || status?.argo.operation === "Error";
-  const online = status?.pod.state === "online" && !status.rollout.updating;
-  const finished = synced && online && (everStopped || Date.now() - lastApply.at > 8 * 60 * 1000);
 
   const syncState: StepState = synced ? "done" : failed ? "failed" : "active";
   const restartState: StepState = !synced ? "waiting" : everStopped && !down ? "done" : finished ? "done" : "active";

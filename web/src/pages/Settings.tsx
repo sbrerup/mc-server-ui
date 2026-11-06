@@ -6,7 +6,7 @@ import type { BackupsResponse, GroupId, Setting } from "../../../shared/types";
 import { api } from "../api";
 import { SettingRow } from "../components/SettingRow";
 import { formatBytes, timeAgo } from "../format";
-import { useConfig, usePolling } from "../state";
+import { useConfig, useRefresh, useRefreshable } from "../state";
 
 function useRow() {
   const { effective, values, sources, issues, derived, edits, edit, revert, rules } = useConfig();
@@ -146,7 +146,8 @@ function PaperVersionHelper() {
 }
 
 function BackupsPanel() {
-  const { data, error, refresh } = usePolling(() => api.get<BackupsResponse>("/api/backups"), 15_000);
+  const { refreshAll } = useRefresh();
+  const { data, error } = useRefreshable(() => api.get<BackupsResponse>("/api/backups"), { everyMs: 15_000, when: (current) => !!current?.running });
   const [message, setMessage] = useState<string>();
   const [showRestore, setShowRestore] = useState(false);
   const entries = data?.entries ?? [];
@@ -156,7 +157,7 @@ function BackupsPanel() {
     try {
       const result = await api.post<{ message: string }>("/api/backups/now");
       setMessage(result.message);
-      void refresh();
+      void refreshAll();
     } catch (e) {
       setMessage((e as Error).message);
     }

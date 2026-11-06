@@ -14,6 +14,7 @@ import {
   Network,
   PackageCheck,
   Puzzle,
+  RefreshCw,
   Search,
   Server,
   ShieldCheck,
@@ -28,14 +29,15 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { GROUPS, SETTINGS_BY_ID } from "../../shared/catalog";
-import type { ApplyResponse, GroupId, HistoryEntry, MeResponse, ServerStatus } from "../../shared/types";
+import type { ApplyResponse, GroupId, HistoryEntry, MeResponse } from "../../shared/types";
 import { api, setUnauthorizedHandler } from "./api";
 import { ChangesBar, ReviewDialog } from "./components/ApplyFlow";
+import { timeAgo } from "./format";
 import { Console } from "./pages/Console";
 import { Dashboard, HistoryList, StatusPill } from "./pages/Dashboard";
 import { Players } from "./pages/Players";
 import { SearchResults, SettingsPage } from "./pages/Settings";
-import { ConfigProvider, useConfig, usePolling } from "./state";
+import { ConfigProvider, RefreshProvider, useConfig, useRefresh, useRefreshable, useServerStatus } from "./state";
 
 const GROUP_ICONS: Record<string, LucideIcon> = {
   Server,
@@ -142,13 +144,7 @@ function useTheme() {
 }
 
 function HistoryPage() {
-  const [entries, setEntries] = useState<HistoryEntry[]>();
-  useEffect(() => {
-    api
-      .get<HistoryEntry[]>("/api/history")
-      .then(setEntries)
-      .catch(() => setEntries([]));
-  }, []);
+  const { data: entries } = useRefreshable(() => api.get<HistoryEntry[]>("/api/history").catch((): HistoryEntry[] => []));
   return (
     <div className="page">
       <header className="page-header">
@@ -171,8 +167,43 @@ interface Toast {
   link?: { href: string; label: string };
 }
 
+function RefreshButton({ updatedAt, error, autoRefreshing }: { updatedAt?: number; error?: string; autoRefreshing: () => boolean }) {
+  const { refreshAll } = useRefresh();
+  const [busy, setBusy] = useState(false);
+
+  // Keeps the label current between updates.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((tick) => tick + 1), 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const refresh = async () => {
+    setBusy(true);
+    await refreshAll();
+    setBusy(false);
+  };
+
+  let label = "";
+  if (error) label = "Couldn't update";
+  else if (autoRefreshing()) label = "Updating live";
+  else if (updatedAt) label = `Updated ${timeAgo(new Date(updatedAt).toISOString())}`;
+
+  return (
+    <>
+      <span className={`topbar-updated${error ? " tone-bad" : ""}`} title={error}>
+        {label}
+      </span>
+      <button type="button" className="icon-button" aria-label="Refresh" title="Refresh" disabled={busy} onClick={() => void refresh()}>
+        <RefreshCw size={16} className={busy ? "spin" : undefined} aria-hidden />
+      </button>
+    </>
+  );
+}
+
 function Shell({ demo, onSignOut }: { demo: boolean; onSignOut: () => void }) {
   const config = useConfig();
+  const { refreshAll } = useRefresh();
   const [hash, navigate] = useHash();
   const [query, setQuery] = useState("");
   const [reviewing, setReviewing] = useState(false);
@@ -180,7 +211,7 @@ function Shell({ demo, onSignOut }: { demo: boolean; onSignOut: () => void }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [theme, toggleTheme] = useTheme();
   const searchBox = useRef<HTMLInputElement>(null);
-  const status = usePolling(() => api.get<ServerStatus>("/api/status"), 5000);
+  const status = useServerStatus();
 
   const notify = useCallback((message: string, tone?: "error", link?: Toast["link"]) => {
     const id = Date.now() + Math.random();
@@ -232,6 +263,7 @@ function Shell({ demo, onSignOut }: { demo: boolean; onSignOut: () => void }) {
       notify(`${applied} game ${applied === 1 ? "rule" : "rules"} applied. No restart needed.`);
     }
     await config.reload();
+    void refreshAll();
   };
 
   const route = hash.replace(/^#/, "");
@@ -275,7 +307,7 @@ function Shell({ demo, onSignOut }: { demo: boolean; onSignOut: () => void }) {
   } else if (route === "/history") {
     page = <HistoryPage />;
   } else {
-    page = <Dashboard status={status.data} statusError={status.error} navigate={navigate} notify={notify} />;
+    page = <Dashboard status={status.data} statusError={status.error} rollout={status.rollout} navigate={navigate} notify={notify} />;
   }
 
   const navLink = (target: string, label: string, Icon: LucideIcon, badge?: number) => {
@@ -344,6 +376,7 @@ function Shell({ demo, onSignOut }: { demo: boolean; onSignOut: () => void }) {
           </div>
           <div className="topbar-status">
             <StatusPill state={status.data?.pod.state ?? "unknown"} />
+            <RefreshButton updatedAt={status.updatedAt} error={status.error} autoRefreshing={status.autoRefreshing} />
           </div>
         </div>
         <main className="main">{page}</main>
@@ -400,12 +433,14 @@ export function App() {
 
   return (
     <ConfigProvider>
-      <Shell
-        demo={me.demo}
-        onSignOut={() => {
-          void api.post("/api/logout").then(() => setMe({ authenticated: false, demo: me.demo }));
-        }}
-      />
+      <RefreshProvider>
+        <Shell
+          demo={me.demo}
+          onSignOut={() => {
+            void api.post("/api/logout").then(() => setMe({ authenticated: false, demo: me.demo }));
+          }}
+        />
+      </RefreshProvider>
     </ConfigProvider>
   );
 }

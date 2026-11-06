@@ -1,7 +1,7 @@
 import { CornerDownLeft, Loader2, Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { api } from "../api";
-import { usePolling } from "../state";
+import { useRefresh, useRefreshable } from "../state";
 
 interface Entry {
   command: string;
@@ -24,7 +24,9 @@ export function Console() {
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
 
-  const logs = usePolling(async () => (pausedRef.current ? undefined : await api.get<string>("/api/logs?tail=400")), 3000);
+  const { refreshAll, expectRestart } = useRefresh();
+  // This stays live: it reads the pod's log from Kubernetes, without using RCON.
+  const logs = useRefreshable(async () => (pausedRef.current ? undefined : await api.get<string>("/api/logs?tail=400")), { everyMs: 3000 });
   const [logText, setLogText] = useState("");
   useEffect(() => {
     if (typeof logs.data === "string") setLogText(logs.data);
@@ -54,11 +56,13 @@ export function Console() {
     historyIndex.current = -1;
     try {
       const result = await api.post<{ output: string }>("/api/console", { command: trimmed });
+      if (/^\/?(stop|restart)\b/i.test(trimmed)) expectRestart();
       setEntries((list) => [...list, { command: trimmed, output: result.output }]);
     } catch (e) {
       setEntries((list) => [...list, { command: trimmed, output: (e as Error).message, failed: true }]);
     } finally {
       setBusy(false);
+      void refreshAll();
     }
   };
 

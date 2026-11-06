@@ -2,10 +2,11 @@ import { Activity, ArrowRight, Boxes, Download, ExternalLink, GitCommitHorizonta
 import { useEffect, useState, type ReactNode } from "react";
 import type { HistoryEntry, ServerStatus } from "../../../shared/types";
 import { api } from "../api";
+import type { RolloutProgress } from "../autoRefresh";
 import { RolloutTracker } from "../components/ApplyFlow";
 import { Tooltip } from "../components/Tooltip";
 import { formatBytes, shortSha, timeAgo, uptime } from "../format";
-import { useConfig } from "../state";
+import { useConfig, useRefresh, useRefreshable } from "../state";
 
 const STATE_LABEL: Record<ServerStatus["pod"]["state"], string> = {
   online: "Online",
@@ -63,28 +64,24 @@ function ConfirmButton({ children, confirm, onConfirm, disabled }: { children: R
   );
 }
 
-export function Dashboard({ status, statusError, navigate, notify }: { status?: ServerStatus; statusError?: string; navigate: (hash: string) => void; notify: (message: string, tone?: "error") => void }) {
+export function Dashboard({ status, statusError, rollout, navigate, notify }: { status?: ServerStatus; statusError?: string; rollout: RolloutProgress; navigate: (hash: string) => void; notify: (message: string, tone?: "error") => void }) {
   const { config, values } = useConfig();
-  const [history, setHistory] = useState<HistoryEntry[]>();
+  const { refreshAll, expectRestart } = useRefresh();
+  const { data: history } = useRefreshable(() => api.get<HistoryEntry[]>("/api/history").catch((): HistoryEntry[] => []), { reloadOn: status?.argo.revision });
   const [radii, setRadii] = useState({ overworld: 5000, nether: 2500, end: 2500 });
   const [busy, setBusy] = useState<string>();
-
-  useEffect(() => {
-    api
-      .get<HistoryEntry[]>("/api/history")
-      .then(setHistory)
-      .catch(() => setHistory([]));
-  }, [status?.argo.revision]);
 
   const run = async (name: string, path: string, body?: unknown) => {
     setBusy(name);
     try {
       const result = await api.post<{ output?: string; message?: string }>(path, body);
+      if (name === "restart") expectRestart();
       notify(result.message || result.output || "Done.");
     } catch (e) {
       notify((e as Error).message, "error");
     } finally {
       setBusy(undefined);
+      void refreshAll();
     }
   };
 
@@ -113,7 +110,7 @@ export function Dashboard({ status, statusError, navigate, notify }: { status?: 
       {statusError && <div className="callout callout-error">Can't read the server's status: {statusError}</div>}
       {status && status.pod.state !== "online" && status.pod.detail && <div className="callout callout-warning">The pod reports: {status.pod.detail}</div>}
 
-      <RolloutTracker status={status} />
+      <RolloutTracker status={status} rollout={rollout} />
 
       <section className="metrics" aria-label="Server health">
         <Metric
