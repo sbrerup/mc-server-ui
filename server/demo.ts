@@ -202,7 +202,7 @@ export class DemoCluster implements Cluster {
       return ok("");
     }
     if (argv[0] === "sh" && argv[2] === MULTI_RCON_SCRIPT) {
-      return ok(argv.slice(4).map((c) => `${this.rcon(c)}\n${SEPARATOR}\n`).join(""));
+      return ok(`> ${argv.slice(4).map((c) => `${this.rcon(c)}\n> `).join("")}`);
     }
     if (argv[0] === "sh" && argv[2] === MULTI_CAT_SCRIPT) {
       return ok(argv.slice(4).map((f) => `${this.file(f)}\n${SEPARATOR}\n`).join(""));
