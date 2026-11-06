@@ -1,8 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { parseBackups, parseDf, parseGamerule, parseList, parseMspt, parsePlayerFile, parseTps, stripFormatting } from "../server/parse";
+import { parseBackups, parseDf, parseGamerule, parseList, parseMspt, parsePlayerFile, parseRconSession, parseTps, stripFormatting } from "../server/parse";
 
 // These are the exact replies captured from the live Paper 26.3 server.
 describe("parsing real server output", () => {
+  it("splits one rcon-cli session into its replies", () => {
+    const raw =
+      "> There are 0 of a max of 10 players online: \n" +
+      "> \u001b[33mTPS from last 1m, 5m, 15m: \u001b[32m20.0\u001b[0m, \u001b[32m20.0\u001b[0m, \u001b[32m20.0\n\u001b[0m\n" +
+      "> \u001b[33mServer tick times \u001b[33m(\u001b[37mavg\u001b[33m/\u001b[37mmin\u001b[33m/\u001b[37mmax\u001b[33m) from last 5s\u001b[37m,\u001b[33m 10s\u001b[37m,\u001b[33m 1m\u001b[33m:\n" +
+      "\u001b[0m\u001b[33m◴ \u001b[32m0.1\u001b[37m/\u001b[32m0.1\u001b[37m/\u001b[32m0.4\u001b[33m, \u001b[32m0.1\u001b[37m/\u001b[32m0.1\u001b[37m/\u001b[32m0.5\u001b[33m, \u001b[32m0.2\u001b[37m/\u001b[32m0.1\u001b[37m/\u001b[32m15.0\n\u001b[0m\n" +
+      "> [Chunky] No tasks running.\n\u001b[0m\n" +
+      "> ";
+    const replies = parseRconSession(raw);
+    expect(replies).toHaveLength(4);
+    expect(parseList(replies[0]!)).toEqual({ count: 0, max: 10, names: [] });
+    expect(parseTps(replies[1]!)).toEqual({ m1: 20, m5: 20, m15: 20 });
+    expect(parseMspt(replies[2]!)).toEqual({ avg5s: 0.1, min5s: 0.1, max5s: 0.4, avg1m: 0.2, max1m: 15 });
+    expect(replies[3]).toBe("[Chunky] No tasks running.");
+  });
+
+  it("finds no replies in a session that didn't get as far as one", () => {
+    expect(parseRconSession("")).toEqual([]);
+    expect(parseRconSession("> ")).toEqual([]);
+    expect(parseRconSession("> cut off before the next prompt")).toEqual([]);
+  });
+
+  it("keeps an empty reply in its place", () => {
+    expect(parseRconSession("> \n> second\n> ")).toEqual(["", "second"]);
+  });
+
   it("reads the player list", () => {
     expect(parseList("There are 0 of a max of 10 players online: ")).toEqual({ count: 0, max: 10, names: [] });
     expect(parseList("There are 2 of a max of 10 players online: Alice, Bob_2\n")).toEqual({ count: 2, max: 10, names: ["Alice", "Bob_2"] });

@@ -11,6 +11,12 @@ export function stripFormatting(text: string): string {
     .trim();
 }
 
+/** The replies from one rcon-cli session, which prompts before each command: `> reply one\n> reply two\n> ` */
+export function parseRconSession(text: string): string[] {
+  if (!text.startsWith("> ")) return [];
+  return text.slice(2).split("\n> ").slice(0, -1).map(stripFormatting);
+}
+
 /** `There are 2 of a max of 10 players online: Alice, Bob` */
 export function parseList(text: string): OnlinePlayers | undefined {
   const match = stripFormatting(text).match(/There are (\d+) of a max of (\d+) players online:?\s*(.*)$/s);

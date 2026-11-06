@@ -3,15 +3,16 @@ import { SETTINGS } from "../shared/catalog";
 import type { BackupsResponse, GameRulesResponse, PlayersResponse, ServerStatus, Value } from "../shared/types";
 import { HttpError, type Cluster } from "./cluster";
 import { parseLive, type ParsedLive } from "./manifest";
-import { parseBackups, parseDf, parseGamerule, parseIpBans, parseList, parseMspt, parsePlayerFile, parseTps, stripFormatting } from "./parse";
+import { parseBackups, parseDf, parseGamerule, parseIpBans, parseList, parseMspt, parsePlayerFile, parseRconSession, parseTps, stripFormatting } from "./parse";
 
 export const MAIN_CONTAINER = "minecraft";
 export const BACKUP_CONTAINER = "backup";
 const SEPARATOR = "@@mc-server-ui@@";
 
-/** Runs several RCON commands in one exec, so reading all game rules takes one API call. */
-export const MULTI_RCON_SCRIPT = `for c in "$@"; do rcon-cli "$c" 2>&1; printf '\\n${SEPARATOR}\\n'; done`;
-export const MULTI_CAT_SCRIPT = `for f in "$@"; do cat "$f" 2>/dev/null; printf '\\n${SEPARATOR}\\n'; done`;
+/** Sends several RCON commands over one connection, because the server logs every connection it gets. */
+export const MULTI_RCON_SCRIPT = `printf '%s\\n' "$@" | rcon-cli`;
+const RCON_OUT_OF_STEP = "Weird. This response is for another request.";
+export const MULTI_CAT_SCRIPT =`for f in "$@"; do cat "$f" 2>/dev/null; printf '\\n${SEPARATOR}\\n'; done`;
 
 export const LIVE_FILES = [
   "/data/server.properties",
@@ -59,9 +60,15 @@ export class Game {
   ) {}
 
   private async rconMany(commands: string[]): Promise<string[]> {
+    // rcon-cli reads one command per line, so a line break would start another command.
+    if (commands.some((command) => /[\r\n]/.test(command))) throw new Error("A server command can't contain a line break.");
     const result = await this.cluster.exec(MAIN_CONTAINER, ["sh", "-c", MULTI_RCON_SCRIPT, "--", ...commands], { timeoutMs: 45_000 });
-    if (result.code !== 0 && !result.stdout) throw new ServerOffline(stripFormatting(result.stderr) || undefined);
-    return split(result.stdout).slice(0, commands.length).map(stripFormatting);
+    const replies = parseRconSession(result.stdout);
+    // A missing reply means the connection dropped, so the replies can't be trusted to match the commands.
+    if (replies.length !== commands.length) throw new ServerOffline(stripFormatting(result.stderr) || undefined);
+    // rcon-cli reads one packet per command, so a reply over 4 KB pushes the later replies out of step.
+    if (replies.some((reply) => reply.startsWith(RCON_OUT_OF_STEP))) throw new Error("A reply from the server was too long to read, so the results were discarded.");
+    return replies;
   }
 
   /** Runs one command. No shell is involved, so the text can't escape into one. */
