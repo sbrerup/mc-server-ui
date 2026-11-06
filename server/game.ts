@@ -74,10 +74,13 @@ export class Game {
 
   // Status -----------------------------------------------------------------------
 
-  /** Short cache, so several open tabs don't each run RCON commands every few seconds. */
-  status(): Promise<ServerStatus> {
+  /**
+   * Short cache, so several open tabs don't each run RCON commands every few seconds.
+   * `fresh` skips it, for someone waiting to see the result of an action.
+   */
+  status(fresh = false): Promise<ServerStatus> {
     const now = Date.now();
-    if (this.statusCache && now - this.statusCache.at < 3500) return this.statusCache.value;
+    if (!fresh && this.statusCache && now - this.statusCache.at < 3500) return this.statusCache.value;
     const value = this.readStatus();
     this.statusCache = { at: now, value };
     return value;

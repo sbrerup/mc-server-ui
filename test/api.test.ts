@@ -339,6 +339,19 @@ describe("status", () => {
     expect(body.disk?.totalBytes).toBeGreaterThan(0);
   });
 
+  it("answers from its short cache unless asked for a fresh reading", async () => {
+    const first = await call<ServerStatus>(h, "GET", "/api/status");
+    const cached = await call<ServerStatus>(h, "GET", "/api/status");
+    expect(cached.body.checkedAt).toBe(first.body.checkedAt);
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const fresh = await call<ServerStatus>(h, "GET", "/api/status?fresh=1");
+    expect(fresh.body.checkedAt).not.toBe(first.body.checkedAt);
+
+    const afterFresh = await call<ServerStatus>(h, "GET", "/api/status");
+    expect(afterFresh.body.checkedAt).toBe(fresh.body.checkedAt);
+  });
+
   it("lists backups newest first", async () => {
     const { body } = await call(h, "GET", "/api/backups");
     expect(body.available).toBe(true);

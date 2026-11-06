@@ -2,7 +2,7 @@ import { AlertTriangle, Ban, Crown, Loader2, LogOut, ShieldOff, UserMinus, UserP
 import { useState, type FormEvent, type ReactNode } from "react";
 import type { PlayerEntry, PlayersResponse } from "../../../shared/types";
 import { api } from "../api";
-import { usePolling } from "../state";
+import { useRefresh, useRefreshable } from "../state";
 
 const NAME = /^[A-Za-z0-9_]{1,16}$/;
 
@@ -124,8 +124,9 @@ function PlayerList({ entries, empty, children }: { entries: PlayerEntry[]; empt
 }
 
 export function Players({ notify }: { notify: Notify }) {
-  const { data, error, refresh } = usePolling(() => api.get<PlayersResponse>("/api/players"), 10_000);
-  const done = () => void refresh();
+  const { refreshAll } = useRefresh();
+  const { data, error } = useRefreshable(() => api.get<PlayersResponse>("/api/players"));
+  const done = () => void refreshAll();
 
   return (
     <div className="page">

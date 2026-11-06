@@ -259,7 +259,7 @@ export function createApp(deps: AppDeps): Hono {
 
   // Live server --------------------------------------------------------------------
 
-  app.get("/api/status", async (c) => c.json(await game.status()));
+  app.get("/api/status", async (c) => c.json(await game.status(c.req.query("fresh") === "1")));
 
   app.get("/api/players", async (c) => c.json(await game.players()));
 
